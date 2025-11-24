@@ -1,7 +1,3 @@
-"""
-Time Tracker Processor - Container Service
-"""
-
 from rabbitmq_bus import RabbitMQEventBus
 from event_processors import TimeTracker
 import time

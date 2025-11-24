@@ -1,16 +1,10 @@
-"""
-Script de teste para identificar os endereços corretos da memória.
-Execute este script e ande no jogo para ver quais endereços mudam.
-"""
-
 from pyboy import PyBoy
 import time
 
-# Endereços candidatos para Pokemon Red
 CANDIDATES = {
     "Player X (D355)": 0xD355,
     "Player Y (D356)": 0xD356,
-    "Player X (D361)": 0xD361,  # Outro endereço comum
+    "Player X (D361)": 0xD361,
     "Player Y (D362)": 0xD362,
     "Coord X (D360)": 0xD360,
     "Coord Y (D361)": 0xD361,
@@ -34,7 +28,6 @@ try:
     while pyboy.tick():
         frame_count += 1
 
-        # Verificar a cada 30 frames (meio segundo)
         if frame_count % 30 == 0:
             print(f"\n--- Frame {frame_count} ---")
 
@@ -42,7 +35,6 @@ try:
                 try:
                     value = pyboy.memory[addr]
 
-                    # Verificar se mudou
                     if name in previous_values and previous_values[name] != value:
                         print(f"✓ {name}: {previous_values[name]} -> {value} (MUDOU!)")
                     else:

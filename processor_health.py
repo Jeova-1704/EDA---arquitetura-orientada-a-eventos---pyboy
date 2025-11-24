@@ -1,7 +1,3 @@
-"""
-Health Tracker Processor - Container Service
-"""
-
 from rabbitmq_bus import RabbitMQEventBus
 from event_processors import HealthTracker
 import time

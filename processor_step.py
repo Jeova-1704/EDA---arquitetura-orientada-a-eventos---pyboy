@@ -1,8 +1,3 @@
-"""
-Step Counter Processor - Container Service
-Roda como serviço independente consumindo do RabbitMQ.
-"""
-
 from rabbitmq_bus import RabbitMQEventBus
 from event_processors import StepCounter
 import time
@@ -11,7 +6,6 @@ import sys
 
 
 def signal_handler(sig, frame):
-    """Handler para Ctrl+C"""
     print('\n🛑 Encerrando Step Counter...')
     sys.exit(0)
 

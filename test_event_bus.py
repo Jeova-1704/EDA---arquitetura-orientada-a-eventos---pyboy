@@ -1,13 +1,7 @@
-"""
-Teste simples para validar o Event Bus.
-Execute com: python test_event_bus.py
-"""
-
 from event_bus import EventBus
 
 
 def test_event_bus():
-    """Testa a funcionalidade básica do Event Bus."""
 
     bus = EventBus()
 
