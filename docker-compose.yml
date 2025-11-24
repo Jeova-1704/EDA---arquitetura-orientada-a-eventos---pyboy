@@ -1,0 +1,85 @@
+services:
+  # RabbitMQ Message Broker
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    container_name: pokemon-rabbitmq
+    hostname: rabbitmq
+    ports:
+      - "5672:5672"   # Porta AMQP (comunicação)
+      - "15672:15672" # Porta Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: pokemon
+      RABBITMQ_DEFAULT_PASS: pokemon123
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - pokemon-network
+
+  # Battle Counter Processor
+  processor-battle:
+    build: .
+    container_name: pokemon-processor-battle
+    command: python processor_battle.py
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - PYTHONUNBUFFERED=1
+    networks:
+      - pokemon-network
+    restart: unless-stopped
+
+  # Step Counter Processor
+  processor-step:
+    build: .
+    container_name: pokemon-processor-step
+    command: python processor_step.py
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - PYTHONUNBUFFERED=1
+    networks:
+      - pokemon-network
+    restart: unless-stopped
+
+  # Health Tracker Processor
+  processor-health:
+    build: .
+    container_name: pokemon-processor-health
+    command: python processor_health.py
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - PYTHONUNBUFFERED=1
+    networks:
+      - pokemon-network
+    restart: unless-stopped
+
+  # Time Tracker Processor
+  processor-time:
+    build: .
+    container_name: pokemon-processor-time
+    command: python processor_time.py
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - PYTHONUNBUFFERED=1
+    networks:
+      - pokemon-network
+    restart: unless-stopped
+
+volumes:
+  rabbitmq_data:
+    driver: local
+
+networks:
+  pokemon-network:
+    driver: bridge
