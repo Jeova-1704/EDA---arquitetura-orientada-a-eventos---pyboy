@@ -722,16 +722,6 @@ pokemon/
 ======================================================================
 ```
 
----
-
-## Licença
-
-Projeto educacional para disciplina de Arquitetura de Software.
-
----
-
-## Contribuindo
-
 ### Adicionar Novo Processador
 
 1. Criar classe em `event_processors.py`:
@@ -772,4 +762,4 @@ if self.detect_new_condition():
 
 ---
 
-**Desenvolvido com ❤️ para aprendizado de Arquitetura de Software**
+**Desenvolvido para Arquitetura de Software**
