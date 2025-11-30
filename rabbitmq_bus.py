@@ -100,8 +100,12 @@ class RabbitMQEventBus:
                     durable=True
                 )
 
-                queue_name = f"queue_{event_type}"
-                channel.queue_declare(queue=queue_name, durable=True)
+                result = channel.queue_declare(
+                    queue='',           
+                    exclusive=True,     
+                    auto_delete=True    
+                )
+                queue_name = result.method.queue  
 
                 channel.queue_bind(
                     exchange=self.exchange,
