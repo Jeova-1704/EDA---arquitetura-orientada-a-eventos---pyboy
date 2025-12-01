@@ -1,673 +1,355 @@
-# Pokemon Red - Event-Driven Architecture
+# Pokemon Red - Event-Driven Microservices Architecture
 
-Sistema de monitoramento e controle para Pokemon Red implementando arquitetura orientada a eventos com padrão Publish/Subscribe usando PyBoy emulator.
+Sistema de monitoramento e controle para Pokemon Red implementando **arquitetura de microserviços orientada a eventos** com RabbitMQ como message broker.
 
-## Índice
+## 📋 Índice
 
 - [Sobre o Projeto](#sobre-o-projeto)
-- [Requisitos Implementados](#requisitos-implementados)
-- [Quick Start](#quick-start)
 - [Arquitetura](#arquitetura)
-- [Modos de Execução](#modos-de-execução)
-- [Componentes do Sistema](#componentes-do-sistema)
-- [Controles e Comandos](#controles-e-comandos)
-- [Testes](#testes)
-- [Docker e Containerização](#docker-e-containerização)
-- [Troubleshooting](#troubleshooting)
-- [Conceitos Demonstrados](#conceitos-demonstrados)
-- [Referências](#referências)
+- [Microserviços](#microserviços)
+- [Quick Start](#quick-start)
+- [Como Usar](#como-usar)
+- [API REST](#api-rest)
+- [Escalabilidade](#escalabilidade)
+- [Monitoramento](#monitoramento)
 
 ---
 
 ## Sobre o Projeto
 
-Este projeto implementa uma **arquitetura orientada a eventos (Event-Driven Architecture)** para Pokemon Red usando o emulador PyBoy. Inspirado no "Twitter Plays Pokemon", o sistema detecta eventos do jogo em tempo real e mantém estatísticas detalhadas através de processadores de eventos independentes.
+Este projeto demonstra uma **arquitetura de microserviços completa** utilizando:
+
+- ✅ **Event-Driven Architecture** (EDA)
+- ✅ **Publish/Subscribe Pattern**
+- ✅ **Microservices Architecture**
+- ✅ **Message Broker** (RabbitMQ)
+- ✅ **REST API** (API Gateway)
+- ✅ **Containerização** (Docker)
+- ✅ **Escalabilidade Horizontal**
+- ✅ **Resiliência** - serviços independentes
 
 ### Tecnologias
 
 - **Python 3.12+**
 - **PyBoy 2.6.1+** - Emulador Game Boy
-- **RabbitMQ 3.12** - Message broker (modo distribuído)
+- **RabbitMQ 3.12** - Message broker AMQP
+- **Flask 3.0+** - REST API
 - **Docker & Docker Compose** - Containerização
-- **pika** - Cliente RabbitMQ para Python
-
----
-
-## Requisitos Implementados
-
-- ✅ **Ponto 1**: Event Bus (Publish/Subscribe)
-- ✅ **Ponto 2**: 6 Processadores de Eventos
-- ✅ **Ponto 3**: Integração com PyBoy + Relatórios periódicos
-- ✅ **Ponto 4**: Controle FIFO via comandos (Twitter Plays Pokemon)
-- ✅ **Ponto 5**: RabbitMQ como broker externo
-- ⚙️ **Ponto 6**: Docker Compose (em desenvolvimento)
-
----
-
-## Quick Start
-
-### Instalação
-
-```bash
-# Instalar dependências usando uv
-uv sync
-
-# OU usando pip
-pip install pyboy pika
-```
-
-### Adicionar ROM
-
-Coloque o arquivo ROM do Pokemon Red na pasta `rom/`:
-```
-rom/Pokemon - Red Version (USA, Europe) (SGB Enhanced).gb
-```
-
-### Executar
-
-**Modo Normal (Teclado):**
-```bash
-python main.py
-```
-
-**Modo FIFO (Comandos):**
-```bash
-python main_fifo.py
-```
-
-**Modo Broker (RabbitMQ):**
-```bash
-# 1. Iniciar RabbitMQ
-docker-compose up -d
-
-# 2. Executar jogo
-python main_broker.py
-
-# 3. Monitorar (opcional)
-# http://localhost:15672 (pokemon/pokemon123)
-```
 
 ---
 
 ## Arquitetura
 
-### Visão Geral
-
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                         CAMADA DE JOGO                          │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │              PyBoy (Emulador Game Boy)                   │   │
-│  │  - Memória (RAM/ROM)                                     │   │
-│  │  - CPU Z80                                               │   │
-│  │  - Display (SDL2)                                        │   │
-│  └────────────────────┬─────────────────────────────────────┘   │
-└─────────────────────────┼───────────────────────────────────────┘
-                          │ Leitura de memória
-                          ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    CAMADA DE MONITORAMENTO                      │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │           PokemonRedMonitor (game_monitor.py)            │   │
-│  │  - Lê endereços de memória a cada frame                 │   │
-│  │  - Detecta mudanças (posição, HP, batalhas)             │   │
-│  │  - Publica eventos quando detecta mudanças              │   │
-│  └────────────────────┬─────────────────────────────────────┘   │
-└─────────────────────────┼───────────────────────────────────────┘
-                          │ Publica eventos
-                          ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    CAMADA DE COMUNICAÇÃO                        │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │               Event Bus / RabbitMQ                       │   │
-│  │  - Gerencia subscribers                                  │   │
-│  │  - Roteia eventos para callbacks                        │   │
-│  │  - Desacopla publishers de subscribers                  │   │
-│  └────────────────────┬─────────────────────────────────────┘   │
-└─────────────────────────┼───────────────────────────────────────┘
-                          │ Notifica subscribers
-                          ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                  CAMADA DE PROCESSAMENTO                        │
-│  ┌──────────────┬──────────────┬──────────────┬─────────────┐   │
-│  │ BattleCounter│  StepCounter │PositionTrack│ TimeTracker │   │
-│  ├──────────────┼──────────────┼──────────────┼─────────────┤   │
-│  │HealthTracker │ReportGenerat.│  ... outros processadores │   │
-│  └──────────────┴──────────────┴──────────────┴─────────────┘   │
-└─────────────────────────────────────────────────────────────────┘
+│                    VOCÊ JOGANDO (Local)                         │
+│                 PyBoy com Interface SDL2                        │
+└────────────────────────┬────────────────────────────────────────┘
+                         │ Publica eventos
+                         ▼
+┌────────────────────────────────────────────────────────────────┐
+│                    RABBITMQ MESSAGE BROKER                     │
+│                   (Docker Container)                           │
+│   - Exchange: pokemon_events (topic)                           │
+│   - Queues: Exclusive temporary queues per consumer            │
+│   - Ports: 5672 (AMQP), 15672 (Management UI)                 │
+└──┬─────────┬──────────┬──────────┬──────────┬─────────────────┘
+   │         │          │          │          │
+   ▼         ▼          ▼          ▼          ▼
+┌─────┐  ┌─────┐  ┌─────────┐ ┌────────┐ ┌────────────┐
+│API  │  │REPORT│  │PROCESSOR│ │PROCESS.│ │PROCESSOR   │
+│GTW  │  │SERV. │  │BATTLE   │ │STEP    │ │HEALTH/POS. │
+└─────┘  └─────┘  └─────────┘ └────────┘ └────────────┘
+(Docker) (Docker)   (Docker)    (Docker)    (Docker)
 ```
 
-### Padrões Arquiteturais
+### Fluxo de Eventos
 
-#### 1. Event-Driven Architecture (EDA)
-Sistema baseado em eventos onde componentes se comunicam através de mensagens assíncronas.
+1. **Você joga** Pokemon Red localmente (interface SDL2)
+2. **Game monitor** detecta mudanças → Publica eventos no **RabbitMQ**
+3. **RabbitMQ** roteia eventos para filas específicas
+4. **Processadores** (Docker) consomem eventos de forma independente
+5. **Report Service** (Docker) consolida estatísticas
+6. **API Gateway** (Docker) expõe dados via REST API
 
-#### 2. Publish/Subscribe Pattern
-Event Bus implementa padrão Pub/Sub onde:
-- **Publishers** emitem eventos sem conhecer os subscribers
-- **Subscribers** se registram para eventos específicos
-- **Event Bus** gerencia e roteia as mensagens
+### Resiliência
 
-#### 3. Observer Pattern
-Processadores de eventos atuam como observers que reagem a mudanças de estado do jogo.
-
-#### 4. Producer-Consumer Pattern (Modo FIFO)
-Thread de input produz comandos → Fila FIFO → Main loop consome comandos
+- ✅ Se um processador cair, outros continuam funcionando
+- ✅ RabbitMQ armazena mensagens persistentemente
+- ✅ Containers reiniciam automaticamente (`restart: unless-stopped`)
+- ✅ Filas temporárias exclusivas previnem conflitos
+- ✅ Jogo roda localmente (não depende de containers)
 
 ---
 
-## Modos de Execução
+## Microserviços
 
-### Comparação Rápida
+### 1. RabbitMQ (Docker)
+**Responsabilidade:** Message broker AMQP
 
-| Modo | Arquivo | Controle | Event Bus | Ponto | Complexidade |
-|------|---------|----------|-----------|-------|--------------|
-| **Normal** | `main.py` | Teclado (SDL2) | Local (memória) | 1-3 | ⭐ Básico |
-| **FIFO** | `main_fifo.py` | Comandos (texto) | Local (memória) | 4 | ⭐⭐ Médio |
-| **Broker** | `main_broker.py` | Teclado (SDL2) | RabbitMQ (externo) | 5 | ⭐⭐⭐ Avançado |
+- Recebe eventos do jogo
+- Roteia para processadores
+- Persiste mensagens
+- Interface web de gerenciamento
 
-### 1. Modo Normal - Controle via Teclado
+### 2. API Gateway (Docker)
+**Responsabilidade:** Interface REST para o sistema
 
-**Características:**
-- ✅ Controle via teclado (setas, Z, X, Enter)
-- ✅ Event Bus local (em memória)
-- ✅ 6 processadores de eventos
-- ✅ Relatórios periódicos e finais
+- Expõe endpoints HTTP
+- Consolida estatísticas em tempo real
+- Healthcheck dos serviços
 
-**Executar:**
+**Endpoints:**
+- `GET /` - Documentação
+- `GET /health` - Status da API
+- `GET /stats` - Todas estatísticas
+- `GET /stats/battles` - Batalhas
+- `GET /stats/steps` - Passos
+- `GET /stats/health` - HP atual
+- `GET /stats/position` - Posição
+- `GET /reports` - Relatórios gerados
+
+**Porta:** 8000
+
+### 3. Report Service (Docker)
+**Responsabilidade:** Gerar relatórios consolidados
+
+- Coleta estatísticas de todos processadores
+- Gera relatórios periódicos (5 min)
+- Gera relatório final ao encerrar
+
+### 4. Processor Services (4 microserviços no Docker)
+
+**Battle Processor:**
+- Conta batalhas
+- Registra histórico
+
+**Step Processor:**
+- Conta passos
+- Log a cada 10 passos
+- *Escalável horizontalmente*
+
+**Health Processor:**
+- Monitora HP
+- Alerta quando crítico (< 20%)
+
+**Position Processor:**
+- Rastreia posição
+- Detecta mudanças de mapa
+
+---
+
+## Quick Start
+
+### Pré-requisitos
+
+- **Docker Desktop** instalado e rodando
+- **Python 3.12+** instalado
+- **ROM** do Pokemon Red em `rom/Pokemon - Red Version (USA, Europe) (SGB Enhanced).gb`
+
+### Dependências Python
+
 ```bash
-python main.py
-```
-
-**Controles:**
-- **Setas**: Movimento
-- **Z**: Botão A (Confirmar/Interagir)
-- **X**: Botão B (Cancelar/Correr)
-- **Enter**: Start (Menu)
-- **Backspace**: Select
-- **ESC**: Fechar jogo
-
-### 2. Modo FIFO - Twitter Plays Pokemon
-
-**Características:**
-- ✅ Controle via comandos de texto
-- ✅ Fila FIFO thread-safe
-- ✅ Delay controlado (250ms entre comandos)
-- ✅ Thread separada para input
-- ✅ Simula múltiplos jogadores
-
-**Executar:**
-```bash
-python main_fifo.py
-```
-
-**Comandos:**
-```bash
-# Movimento
->>> up up down left right
-
-# Botões
->>> a b start select
-
-# Especiais
->>> status   # Ver fila
->>> clear    # Limpar fila
->>> help     # Ajuda
->>> quit     # Sair
-```
-
-**Arquitetura:**
-```
-Terminal → CommandQueue (FIFO) → Main Loop → PyBoy
-              ↑                       ↓
-     InputThread              Event Bus → Processors
-```
-
-### 3. Modo Broker - Arquitetura Distribuída
-
-**Características:**
-- ✅ RabbitMQ como broker externo
-- ✅ Mensagens persistentes
-- ✅ Arquitetura distribuída
-- ✅ Interface web de monitoramento
-- ✅ Escalabilidade horizontal
-
-**Executar:**
-```bash
-# 1. Iniciar RabbitMQ
-docker-compose up -d
-
-# 2. Aguardar 10-15 segundos
-
-# 3. Executar jogo
-python main_broker.py
-
-# 4. Monitorar (opcional)
-# http://localhost:15672
-# Username: pokemon
-# Password: pokemon123
-```
-
-**Arquitetura:**
-```
-Monitor → RabbitMQ (servidor externo) → Consumers (threads)
-                ↓
-          Exchange (topic)
-                ↓
-    ┌──────────┼──────────┬──────────┐
-    ▼          ▼          ▼          ▼
-  Queue 1   Queue 2   Queue 3    Queue N
-    ↓          ▼          ▼          ↓
-Processor1 Processor2 Processor3  ...
- (thread)   (thread)   (thread)
+# Instalar dependências
+pip install pyboy pika
 ```
 
 ---
 
-## Componentes do Sistema
+## Como Usar
 
-### 1. Event Bus (`event_bus.py`)
+### **Opção 1: Script Automático (Recomendado)**
 
-**Responsabilidade:** Broker central de mensagens
-
-**API:**
-```python
-event_bus.subscribe(event_type, callback)  # Registra subscriber
-event_bus.publish(event_type, data)        # Publica evento
-event_bus.unsubscribe(event_type, callback) # Remove subscriber
+```bash
+start.bat
 ```
 
-**Características:**
-- Thread-safe
-- O(1) para adicionar subscriber
-- O(n) para publicar evento
+Isso vai:
+1. ✅ Subir todos os microserviços no Docker
+2. ✅ Aguardar RabbitMQ ficar pronto
+3. ✅ Abrir o jogo com interface gráfica
+4. ✅ Você joga enquanto microserviços processam eventos!
 
-### 2. Game Monitor (`game_monitor.py`)
+### **Opção 2: Manual (Passo a Passo)**
 
-**Responsabilidade:** Detectar eventos do jogo lendo memória
+```bash
+# 1. Subir microserviços
+docker compose up -d rabbitmq api-gateway report-service processor-battle processor-step processor-health processor-position
 
-**Funcionamento:**
-1. Chamado a cada frame (60 FPS)
-2. Lê endereços específicos da memória
-3. Compara com estado anterior
-4. Se detectar mudança, publica evento
+# 2. Aguardar RabbitMQ (10 segundos)
+timeout /t 10
 
-**Endereços Monitorados:**
-```python
-0xD362  # Player X position
-0xD361  # Player Y position
-0xD057  # In battle flag
-0xD35E  # Current map ID
-0xD52A  # Player direction
-0xD015-0xD016  # Current HP (2 bytes)
-0xD018-0xD019  # Max HP (2 bytes)
+# 3. Rodar jogo localmente
+python run_game_local.py
 ```
 
-### 3. Event Processors (`event_processors.py`)
+### **Opção 3: Desenvolvimento (Com Logs)**
 
-#### 3.1 BattleCounter
-- **Evento:** `battle_start`
-- **Função:** Conta batalhas e mantém histórico
+```bash
+# 1. Subir microserviços COM logs
+docker compose up rabbitmq api-gateway report-service processor-battle processor-step processor-health processor-position
 
-#### 3.2 StepCounter
-- **Evento:** `step`
-- **Função:** Conta passos do jogador
-- **Output:** Mostra a cada 10 passos
-
-#### 3.3 PositionTracker
-- **Evento:** `position_change`
-- **Função:** Rastreia posição e mapa
-
-#### 3.4 TimeTracker
-- **Eventos:** `game_start`, `game_pause`, `game_resume`
-- **Função:** Rastreia tempo de jogo
-- **Cálculo:** Tempo real - tempo pausado
-
-#### 3.5 HealthTracker
-- **Evento:** `health_change`
-- **Função:** Monitora HP do Pokémon
-- **Alerta:** HP < 20%
-
-#### 3.6 ReportGenerator
-- **Eventos:** `game_end`, timer interno
-- **Função:** Gera relatórios periódicos (5min) e finais
-- **Saída:** Relatório formatado no console
-
-### 4. RabbitMQ Event Bus (`rabbitmq_bus.py`)
-
-**Responsabilidade:** Wrapper para RabbitMQ mantendo mesma API
-
-**Características:**
-- Conecta via protocolo AMQP
-- Exchange tipo topic
-- Consumer thread por evento
-- Serialização JSON
-- Message acknowledgements
+# 2. Em outro terminal, rodar jogo
+python run_game_local.py
+```
 
 ---
 
-## Controles e Comandos
+## 🎮 Controles do Jogo
 
-### Modo Normal - Teclado
-
-| Tecla | Função | Descrição |
-|-------|--------|-----------|
-| **↑↓←→** | Movimento | Move o personagem |
-| **Z** | Botão A | Confirmar / Interagir |
-| **X** | Botão B | Cancelar / Correr |
-| **Enter** | START | Abrir menu |
-| **Backspace** | SELECT | Alternar Pokémons |
+| Tecla | Botão | Função |
+|-------|-------|--------|
+| **↑↓←→** | D-Pad | Movimento |
+| **Z** | A | Confirmar/Interagir |
+| **X** | B | Cancelar/Correr |
+| **Enter** | START | Menu |
+| **Backspace** | SELECT | Trocar Pokemon |
 | **ESC** | - | Fechar jogo |
 
-### Modo FIFO - Comandos
+---
 
-**Comandos de Movimento:**
+## API REST
+
+### Acessar Interfaces
+
+- **API Gateway:** http://localhost:8000
+- **RabbitMQ Management:** http://localhost:15672
+  - Usuário: `pokemon`
+  - Senha: `pokemon123`
+
+### Exemplos de Uso
+
 ```bash
-up, down, left, right
+# Obter todas estatísticas
+curl http://localhost:8000/stats
+
+# Apenas batalhas
+curl http://localhost:8000/stats/battles
+
+# Healthcheck
+curl http://localhost:8000/health
+
+# Relatórios gerados
+curl http://localhost:8000/reports
 ```
 
-**Comandos de Botões:**
-```bash
-a, b, start, select
+### Resposta Exemplo
+
+```json
+{
+  "battles": 5,
+  "steps": 247,
+  "health": {
+    "current_hp": 18,
+    "max_hp": 22,
+    "percentage": 81.8
+  },
+  "position": {
+    "current": [10, 15],
+    "map_id": 1
+  },
+  "game": {
+    "is_running": true,
+    "start_time": "2024-12-01T14:30:00"
+  }
+}
 ```
 
-**Comandos Especiais:**
+---
+
+## Escalabilidade
+
+### Escalar Processadores Horizontalmente
+
 ```bash
-status  # Mostra status da fila
-clear   # Limpa fila de comandos
-help    # Mostra ajuda
-quit    # Encerra o jogo
+# Escalar Step Processor para 3 instâncias
+docker compose up -d --scale processor-step=3
+
+# Verificar
+docker compose ps processor-step
 ```
 
-**Exemplos:**
+**Como funciona:**
+- RabbitMQ faz **load balancing** automático
+- Cada instância processa mensagens em paralelo
+- Aumenta throughput sem modificar código
+
+---
+
+## Monitoramento
+
+### Ver Logs dos Microserviços
+
 ```bash
-# Andar e interagir
->>> up up up right a
+# Todos os serviços
+docker compose logs -f
+
+# Serviço específico
+docker compose logs -f processor-battle
+docker compose logs -f api-gateway
+```
+
+### RabbitMQ Management UI
+
+Acesse: http://localhost:15672
+
+**O que monitorar:**
+- **Overview:** Taxa de mensagens, conexões
+- **Queues:** Mensagens prontas, não confirmadas
+- **Exchanges:** Bindings ativos
+- **Connections:** Consumers conectados
+
+---
+
+## Resiliência do Sistema
+
+### Testar Resiliência
+
+```bash
+# Derrubar um processador
+docker compose stop processor-step
+
+# Sistema continua funcionando!
+# - Jogo roda normalmente
+# - Eventos são publicados
+# - Outros processadores funcionam
+# - Mensagens ficam na fila do RabbitMQ
+
+# Reativar processador
+docker compose start processor-step
+# Processador consome mensagens acumuladas!
+```
+
+### Benefícios
+
+- ✅ **Tolerância a falhas** - Um serviço caído não afeta outros
+- ✅ **Persistência** - Mensagens não se perdem
+- ✅ **Auto-recovery** - Containers reiniciam automaticamente
+- ✅ **Escalabilidade** - Adicione mais processadores conforme necessário
+
+---
+
+## Comandos Úteis
+
+```bash
+# Iniciar tudo
+start.bat
+
+# Parar microserviços
+docker compose down
+
+# Reiniciar um serviço
+docker compose restart processor-battle
 
 # Ver status
->>> status
-📊 STATUS DA FILA:
-  Comandos na fila: 3
-  Total processados: 47
-
-# Limpar fila
->>> clear
-🗑️  Fila de comandos limpa!
-
-# Sair
->>> quit
-```
-
-### Contextos de Jogo
-
-**No Overworld (Mundo Aberto):**
-- Movimento: `up, down, left, right`
-- Interagir com NPC: `a`
-- Abrir menu: `start`
-- Correr: `b + movimento`
-
-**Em Batalha:**
-- Atacar: `a a`
-- Selecionar movimento: `a down a`
-- Usar item: `down right a`
-- Fugir: `down down down a`
-
-**Em Menus:**
-- Navegar: `up, down, left, right`
-- Selecionar: `a`
-- Voltar: `b`
-
----
-
-## Testes
-
-### Testar Event Bus
-
-```bash
-python test_event_bus.py
-```
-
-**Saída esperada:**
-```
-1. Registrando subscribers...
-   ✅ Subscribers registrados com sucesso!
-
-2. Publicando eventos...
-   ⚔️  Evento de batalha recebido: {'battle_count': 1}
-   👣 Evento de passo recebido: {'step_count': 1}
-
-✅ Teste do Event Bus concluído com sucesso!
-```
-
-### Testar Modo FIFO
-
-```bash
-python main_fifo.py
->>> up up right a
->>> status
->>> quit
-```
-
-### Testar RabbitMQ
-
-```bash
-# 1. Iniciar RabbitMQ
-docker-compose up -d
-
-# 2. Verificar se está rodando
-docker ps
-
-# 3. Executar jogo
-python main_broker.py
-
-# 4. Verificar interface web
-# http://localhost:15672
-# Login: pokemon / pokemon123
-```
-
----
-
-## Docker e Containerização
-
-### Arquitetura Docker
-
-```
-┌────────────────────────────────────────────┐
-│  Container: rabbitmq                       │
-│  - Image: rabbitmq:3.12-management-alpine  │
-│  - Ports: 5672, 15672                      │
-└────────────────┬───────────────────────────┘
-                 │
-    ┌────────────┼────────────┬──────────┐
-    ▼            ▼            ▼          ▼
-┌──────────┬──────────┬──────────┬──────────┐
-│processor │processor │processor │processor │
-│ -battle  │ -step    │ -health  │ -time    │
-└──────────┴──────────┴──────────┴──────────┘
-```
-
-### Comandos Docker
-
-**Build:**
-```bash
-# Build todas imagens
-docker-compose build
-
-# Build sem cache
-docker-compose build --no-cache
-```
-
-**Executar:**
-```bash
-# Iniciar todos (background)
-docker-compose up -d
-
-# Iniciar e ver logs
-docker-compose up
-
-# Escalar serviço
-docker-compose up -d --scale processor-step=3
-```
-
-**Gerenciar:**
-```bash
-# Ver status
-docker-compose ps
+docker compose ps
 
 # Ver logs
-docker-compose logs -f
+docker compose logs -f
 
-# Parar
-docker-compose down
-
-# Parar e remover volumes
-docker-compose down -v
+# Escalar processador
+docker compose up -d --scale processor-step=3
 ```
-
-**Monitorar:**
-```bash
-# Ver uso de recursos
-docker stats
-
-# Ver logs de serviço específico
-docker logs pokemon-processor-step
-
-# Entrar em container
-docker exec -it pokemon-rabbitmq /bin/sh
-```
-
-### Escalabilidade
-
-```bash
-# Escalar para 3 instâncias
-docker-compose up -d --scale processor-step=3
-```
-
-RabbitMQ faz load balancing automático entre os consumers!
-
----
-
-## Troubleshooting
-
-### Problema: "ROM não encontrado"
-
-**Solução:**
-```bash
-# Verificar se ROM está no local correto
-ls rom/
-
-# Deve ter:
-# Pokemon - Red Version (USA, Europe) (SGB Enhanced).gb
-```
-
-### Problema: RabbitMQ não conecta
-
-**Sintomas:**
-```
-❌ Não foi possível conectar ao RabbitMQ
-```
-
-**Solução:**
-```bash
-# 1. Verificar se está rodando
-docker ps | grep rabbitmq
-
-# 2. Iniciar se não estiver
-docker-compose up -d
-
-# 3. Aguardar 15 segundos
-sleep 15
-
-# 4. Tentar novamente
-python main_broker.py
-```
-
-### Problema: Porta já em uso
-
-**Sintomas:**
-```
-Error: port 5672 already in use
-```
-
-**Solução:**
-```bash
-# Ver processos na porta
-netstat -ano | findstr :5672
-
-# Parar containers
-docker-compose down
-
-# Reiniciar
-docker-compose up -d
-```
-
-### Problema: Container não inicia
-
-**Solução:**
-```bash
-# Ver logs
-docker logs <container-name>
-
-# Ver erro detalhado
-docker-compose logs -f
-
-# Recriar containers
-docker-compose down
-docker-compose up -d
-```
-
-### Problema: Comandos FIFO não executam
-
-**Verificações:**
-1. ✅ PyBoy inicializado com `no_input=True`?
-2. ✅ CommandQueue criada?
-3. ✅ InputHandler iniciado?
-4. ✅ Comandos válidos?
-
-**Debug:**
-```bash
-# Ver mensagens de erro
-# no console onde rodou main_fifo.py
-
-# Testar comando simples
->>> up
-```
-
----
-
-## Conceitos Demonstrados
-
-### Padrões de Projeto
-- ✅ Event-Driven Architecture
-- ✅ Publish/Subscribe Pattern
-- ✅ Observer Pattern
-- ✅ Producer-Consumer Pattern
-
-### Boas Práticas
-- ✅ Separation of Concerns
-- ✅ Loose Coupling
-- ✅ Open/Closed Principle
-- ✅ Single Responsibility Principle
-- ✅ Thread Safety
-
-### Conceitos de Sistema
-- ✅ Event Bus
-- ✅ Fila FIFO
-- ✅ Threading
-- ✅ Memory Mapping
-- ✅ Real-time Monitoring
-- ✅ Message Broker (RabbitMQ)
-- ✅ Containerização (Docker)
-
----
-
-## Referências
-
-- [PyBoy Documentation](https://docs.pyboy.dk/)
-- [Pokemon Red Memory Map](https://datacrystal.romhacking.net/wiki/Pok%C3%A9mon_Red/Blue:RAM_map)
-- [Event-Driven Architecture](https://martinfowler.com/articles/201701-event-driven.html)
-- [RabbitMQ Tutorials](https://www.rabbitmq.com/getstarted.html)
-- [Docker Documentation](https://docs.docker.com/)
 
 ---
 
@@ -675,91 +357,95 @@ docker-compose up -d
 
 ```
 pokemon/
-├── main.py                 # Modo normal (teclado)
-├── main_fifo.py           # Modo FIFO (comandos)
-├── main_broker.py         # Modo broker (RabbitMQ)
-├── event_bus.py           # Event Bus local
-├── rabbitmq_bus.py        # RabbitMQ Event Bus
-├── event_processors.py    # 6 processadores
-├── game_monitor.py        # Monitor do jogo
-├── command_queue.py       # Fila FIFO
-├── command_input.py       # Input handler
-├── test_event_bus.py      # Testes
-├── docker-compose.yml     # Docker orchestration
-├── Dockerfile             # Container image
-├── pyproject.toml         # Dependências
-└── rom/                   # ROMs do Game Boy
+├── docker-compose.yml          # Orquestração dos microserviços
+├── start.bat                   # Script para iniciar tudo
+├── run_game_local.py           # Roda jogo localmente com interface
+├── README.md                   # Esta documentação
+│
+├── services/                   # Microserviços (Docker)
+│   ├── api/                    # API Gateway
+│   ├── reports/                # Report Service
+│   └── processors/             # Event Processors
+│
+├── rabbitmq_bus.py             # RabbitMQ Event Bus
+├── game_monitor.py             # Pokemon Red Monitor
+│
+└── rom/                        # ROMs Game Boy
     └── Pokemon - Red Version.gb
 ```
 
 ---
 
-## Exemplo de Relatório
+## Conceitos Demonstrados
 
-```
-======================================================================
-📊 RELATÓRIO PERIÓDICO #1
-⏰ Gerado em: 2024-11-23 15:30:45
-======================================================================
+### Padrões Arquiteturais
+- ✅ **Event-Driven Architecture**
+- ✅ **Microservices Architecture**
+- ✅ **Publish/Subscribe Pattern**
+- ✅ **API Gateway Pattern**
+- ✅ **Observer Pattern**
 
-⏱️  TEMPO DE JOGO
-   Tempo total: 00:05:23
-   Iniciado em: 2024-11-23 15:25:22
-
-👣 PASSOS
-   Total de passos: 147
-
-⚔️  BATALHAS
-   Total de batalhas: 3
-
-📍 POSIÇÃO ATUAL
-   Posição: (10, 15)
-   Mapa: 1
-
-❤️  SAÚDE
-   HP: 18/22 (81.8%)
-
-======================================================================
-```
-
-### Adicionar Novo Processador
-
-1. Criar classe em `event_processors.py`:
-```python
-class NewProcessor:
-    def on_new_event(self, data):
-        # Processar evento
-        pass
-
-    def get_stats(self):
-        return {"stat": value}
-```
-
-2. Registrar em `main.py`:
-```python
-new_proc = NewProcessor()
-processors["new"] = new_proc
-event_bus.subscribe("new_event", new_proc.on_new_event)
-```
-
-3. Adicionar ao relatório (opcional):
-```python
-# Em ReportGenerator.generate_report()
-stats = self.processors["new"].get_stats()
-print(f"Nova Stat: {stats['stat']}")
-```
-
-### Adicionar Novo Evento
-
-1. Publicar do monitor:
-```python
-# Em PokemonRedMonitor.update()
-if self.detect_new_condition():
-    self.event_bus.publish("new_event", {"data": value})
-```
-
-2. Criar/usar processador para reagir
+### Práticas de Engenharia
+- ✅ **Separation of Concerns**
+- ✅ **Loose Coupling**
+- ✅ **High Cohesion**
+- ✅ **Single Responsibility**
+- ✅ **Containerization**
+- ✅ **Horizontal Scalability**
+- ✅ **Fault Tolerance**
 
 ---
 
-**Desenvolvido para Arquitetura de Software**
+## Troubleshooting
+
+### RabbitMQ não conecta
+
+```bash
+# Aguardar RabbitMQ ficar saudável
+docker compose logs rabbitmq | grep "Server startup complete"
+
+# Reiniciar
+docker compose restart rabbitmq
+```
+
+### Processadores não recebem eventos
+
+```bash
+# Verificar RabbitMQ Management UI
+http://localhost:15672
+
+# Reiniciar processadores
+docker compose restart processor-battle processor-step
+```
+
+### Jogo não abre
+
+```bash
+# Verificar dependências
+pip install pyboy pika
+
+# Verificar ROM
+ls rom/
+```
+
+---
+
+## Licença
+
+Este projeto é para fins educacionais, demonstrando arquitetura de microserviços e event-driven architecture.
+
+**ROM do Pokemon Red não está incluída** - você deve fornecer sua própria ROM legalmente obtida.
+
+---
+
+## Referências
+
+- [PyBoy Documentation](https://docs.pyboy.dk/)
+- [RabbitMQ Tutorials](https://www.rabbitmq.com/getstarted.html)
+- [Docker Compose Documentation](https://docs.docker.com/compose/)
+- [Event-Driven Architecture](https://martinfowler.com/articles/201701-event-driven.html)
+- [Microservices Patterns](https://microservices.io/patterns/microservices.html)
+
+---
+
+**Desenvolvido para demonstrar Arquitetura de Software Orientada a Eventos e Microserviços**

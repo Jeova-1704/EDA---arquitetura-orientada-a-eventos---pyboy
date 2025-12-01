@@ -1,12 +1,12 @@
 services:
-  # RabbitMQ Message Broker
+  # MESSAGE BROKER - RabbitMQ
   rabbitmq:
     image: rabbitmq:3.12-management-alpine
     container_name: pokemon-rabbitmq
     hostname: rabbitmq
     ports:
-      - "5672:5672"   # Porta AMQP (comunicação)
-      - "15672:15672" # Porta Management UI
+      - "5672:5672"   # AMQP Protocol
+      - "15672:15672" # Management UI
     environment:
       RABBITMQ_DEFAULT_USER: pokemon
       RABBITMQ_DEFAULT_PASS: pokemon123
@@ -17,12 +17,62 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 40s
     networks:
       - pokemon-network
+    restart: unless-stopped
 
-  # Battle Counter Processor
+  # API GATEWAY - REST API
+  api-gateway:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+    container_name: pokemon-api-gateway
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - PYTHONUNBUFFERED=1
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+    ports:
+      - "8000:8000"  # API REST
+    networks:
+      - pokemon-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # REPORT SERVICE - Gerador de Relatórios
+  report-service:
+    build:
+      context: .
+      dockerfile: services/reports/Dockerfile
+    container_name: pokemon-report-service
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - PYTHONUNBUFFERED=1
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - REPORT_INTERVAL=300 
+    networks:
+      - pokemon-network
+    restart: unless-stopped
+
+  # EVENT PROCESSORS - Processadores de Eventos
+
+  # Battle Processor - Contador de Batalhas
   processor-battle:
-    build: .
+    build:
+      context: .
+      dockerfile: services/processors/Dockerfile
     container_name: pokemon-processor-battle
     command: python processor_battle.py
     depends_on:
@@ -30,13 +80,17 @@ services:
         condition: service_healthy
     environment:
       - PYTHONUNBUFFERED=1
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
     networks:
       - pokemon-network
     restart: unless-stopped
 
-  # Step Counter Processor
+  # Step Processor - Contador de Passos
   processor-step:
-    build: .
+    build:
+      context: .
+      dockerfile: services/processors/Dockerfile
     container_name: pokemon-processor-step
     command: python processor_step.py
     depends_on:
@@ -44,13 +98,18 @@ services:
         condition: service_healthy
     environment:
       - PYTHONUNBUFFERED=1
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
     networks:
       - pokemon-network
     restart: unless-stopped
+    # Escalabilidade: docker-compose up -d --scale processor-step=3
 
-  # Health Tracker Processor
+  # Health Processor - Monitor de Saúde
   processor-health:
-    build: .
+    build:
+      context: .
+      dockerfile: services/processors/Dockerfile
     container_name: pokemon-processor-health
     command: python processor_health.py
     depends_on:
@@ -58,20 +117,26 @@ services:
         condition: service_healthy
     environment:
       - PYTHONUNBUFFERED=1
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
     networks:
       - pokemon-network
     restart: unless-stopped
 
-  # Time Tracker Processor
-  processor-time:
-    build: .
-    container_name: pokemon-processor-time
-    command: python processor_time.py
+  # Position Processor - Rastreador de Posição
+  processor-position:
+    build:
+      context: .
+      dockerfile: services/processors/Dockerfile
+    container_name: pokemon-processor-position
+    command: python processor_position.py
     depends_on:
       rabbitmq:
         condition: service_healthy
     environment:
       - PYTHONUNBUFFERED=1
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
     networks:
       - pokemon-network
     restart: unless-stopped
@@ -79,7 +144,9 @@ services:
 volumes:
   rabbitmq_data:
     driver: local
+    name: pokemon-rabbitmq-data
 
 networks:
   pokemon-network:
     driver: bridge
+    name: pokemon-event-network
